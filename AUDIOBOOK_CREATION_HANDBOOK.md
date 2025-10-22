@@ -1,565 +1,425 @@
-# Audiobook Creation from Video Files: A Comprehensive Handbook
+# Audiobook Creation Manual
+## Converting Video Files to Professional M4B Audiobooks
 
-## Overview
-
-This handbook provides detailed instructions for converting video files into a professional M4B audiobook format with chapters and metadata. The process involves downloading video segments, combining them, extracting audio, and packaging everything into an audiobook file.
+This comprehensive guide explains how to transform a collection of video files into a professional-quality M4B audiobook with proper metadata, chapter markers, and cover art.
 
 ---
 
 ## Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Phase 1: Video Acquisition](#phase-1-video-acquisition)
-3. [Phase 2: Video Processing](#phase-2-video-processing)
-4. [Phase 3: Audio Extraction](#phase-3-audio-extraction)
-5. [Phase 4: Audiobook Creation](#phase-4-audiobook-creation)
-6. [Phase 5: Chapter Enhancement](#phase-5-chapter-enhancement)
-7. [Metadata Configuration](#metadata-configuration)
-8. [Troubleshooting](#troubleshooting)
+1. [Overview](#overview)
+2. [Prerequisites](#prerequisites)
+3. [File Organization](#file-organization)
+4. [Phase 1: Audio Extraction](#phase-1-audio-extraction)
+5. [Phase 2: Metadata Preparation](#phase-2-metadata-preparation)
+6. [Phase 3: Audiobook Assembly](#phase-3-audiobook-assembly)
+7. [Phase 4: Adding Metadata](#phase-4-adding-metadata)
+8. [Phase 5: Chapter Markers](#phase-5-chapter-markers)
+9. [Phase 6: Cover Art and Final Touches](#phase-6-cover-art-and-final-touches)
+10. [Troubleshooting](#troubleshooting)
+11. [Technical Reference](#technical-reference)
+
+---
+
+## Overview
+
+### What This Process Does
+
+Converts a collection of video files (typically course lectures or presentations) into a single M4B audiobook file with:
+- High-quality audio optimized for speech
+- Automatic chapter markers for easy navigation
+- Complete metadata (title, author, year, description, etc.)
+- Embedded cover artwork
+- Proper audiobook media type for compatibility with audiobook players
+
+### The Complete Pipeline
+
+```
+Videos (MP4)
+    ↓
+Audio Extraction (MP3 @ 192k)
+    ↓
+Concatenation & Encoding (M4B @ 92k AAC)
+    ↓
+Metadata Addition
+    ↓
+Chapter Markers
+    ↓
+Cover Art
+    ↓
+Final M4B Audiobook
+```
+
+### Time Investment
+
+- **Setup**: 15-30 minutes
+- **Audio extraction**: 5-10 minutes per hour of video
+- **Encoding**: 15-30 minutes per hour of final audio (longest step)
+- **Metadata/Chapters/Art**: 5 minutes total
+
+For a 10-hour course, expect approximately 2-3 hours of processing time.
 
 ---
 
 ## Prerequisites
 
-### Required Tools
+### Required Software
 
-Install these command-line tools before beginning:
-
+#### 1. FFmpeg (Audio/Video Processing)
 ```bash
-# FFmpeg - for video/audio processing
-sudo apt install ffmpeg          # Ubuntu/Debian
-brew install ffmpeg              # macOS
+# Ubuntu/Debian
+sudo apt install ffmpeg
 
-# FFprobe - usually comes with FFmpeg
-# Used for inspecting media file metadata
+# macOS
+brew install ffmpeg
 
-# MP4Box (from GPAC) - for advanced MP4 manipulation
-sudo apt install gpac            # Ubuntu/Debian
-brew install gpac                # macOS
-
-# mp4chaps (from mp4v2) - for chapter management
-sudo apt install mp4v2-utils     # Ubuntu/Debian
-brew install mp4v2               # macOS
-
-# AtomicParsley - for audiobook-specific metadata
-sudo apt install atomicparsley   # Ubuntu/Debian
-brew install atomicparsley       # macOS
+# Verify installation
+ffmpeg -version
+ffprobe -version
 ```
+
+**What it does**: Extracts audio from video, concatenates files, encodes to AAC
+
+#### 2. AtomicParsley (MP4 Metadata Tool)
+```bash
+# Ubuntu/Debian
+sudo apt install atomicparsley
+
+# macOS
+brew install atomicparsley
+
+# Verify installation
+AtomicParsley --version
+```
+
+**What it does**: Adds cover art and sets the audiobook media type flag
+
+### Optional but Recommended
+
+- **Python 3.8+**: For automation scripts (metadata management)
+- **Text editor**: For creating metadata and concatenation files
+- **Image editor**: For creating/resizing cover art (600x600px recommended)
 
 ---
 
-## Phase 1: Video Acquisition
+## File Organization
 
-### Understanding HLS Streaming
+### Directory Structure
 
-Most online video courses use HLS (HTTP Live Streaming), which splits videos into:
-- **M3U8 playlist files**: Text files listing video segments
-- **TS (Transport Stream) segments**: Small video chunks (typically 2-10 seconds each)
+Create this folder structure before starting:
 
-### Step 1.1: Capture Network Traffic
-
-When accessing your video course, capture network traffic using browser developer tools:
-
-1. Open browser DevTools (F12)
-2. Go to Network tab
-3. Navigate to your video course
-4. Export as HAR (HTTP Archive) file
-5. Save HAR files to `./hars/` directory
-
-**What to capture**: Look for M3U8 playlist requests in the network log. These usually have patterns like:
-- `https://domain.com/path/index.m3u8`
-- Files with `.m3u8` extension
-- Content-type: `application/x-mpegURL` or `application/vnd.apple.mpegurl`
-
-### Step 1.2: Extract M3U8 URLs from HAR Files
-
-M3U8 files contain playlist information. You need to extract these from HAR files:
-
-```bash
-# Example HAR structure - what you're looking for:
-# Request URL: https://example.com/videos/1_1_introduction/index.m3u8
-# Response contains: #EXTM3U and stream information
+```
+project/
+├── videos/              # Source video files (MP4)
+├── audio/               # Extracted audio files (MP3)
+├── audiobook/           # Final output and working files
+│   ├── audio_concat.txt
+│   ├── chapters.txt
+│   ├── temp_audiobook.m4b
+│   └── Final_Audiobook.m4b
+├── cover_art.jpg        # Cover image
+└── metadata.json        # Course metadata (optional)
 ```
 
-The M3U8 file typically contains:
+### File Naming Convention
+
+**Critical**: Files must be named to sort in playback order:
+
 ```
-#EXTM3U
-#EXT-X-VERSION:3
-#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360
-https://example.com/videos/1_1_intro/360p/index.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=2000000,RESOLUTION=1280x720
-https://example.com/videos/1_1_intro/720p/index.m3u8
-```
-
-**Key Points**:
-- The first URL after `#EXT-X-STREAM-INF:` is usually the specific quality stream
-- Choose the quality you want (360p is fine for audio extraction)
-- The nested M3U8 file lists actual video segments
-
-### Step 1.3: Download M3U8 Playlist Files
-
-For each video, create a directory and download its M3U8 file:
-
-```bash
-# Create directory structure
-mkdir -p videos/video_name
-
-# Download the M3U8 playlist
-curl -o videos/video_name/index.m3u8 "https://example.com/path/to/video.m3u8"
-
-# Example with custom headers if needed
-curl -H "User-Agent: Mozilla/5.0" \
-     -H "Referer: https://course-site.com" \
-     -o videos/video_name/index.m3u8 \
-     "https://example.com/path/to/video.m3u8"
+S1T1-introduction.mp4
+S1T2-getting-started.mp4
+S1T3-key-concepts.mp4
+S2T1-advanced-topics.mp4
+S2T2-practical-examples.mp4
 ```
 
-**Options explained**:
-- `-o <file>`: Output filename
-- `-H "Header: Value"`: Add custom HTTP headers (may be needed for authentication)
-- Use quotes around URLs with special characters
+Format: `S{session}T{topic}-descriptive-name.mp4`
 
-### Step 1.4: Parse and Download TS Segments
-
-The downloaded M3U8 file contains references to TS segments:
-
-```bash
-# View the M3U8 content
-cat videos/video_name/index.m3u8
-
-# Example content:
-# #EXTM3U
-# #EXT-X-TARGETDURATION:10
-# #EXT-X-VERSION:3
-# #EXTINF:10.0,
-# seg-1-v1-a1.ts
-# #EXTINF:10.0,
-# seg-2-v1-a1.ts
-```
-
-Download each segment:
-
-```bash
-# Create segments directory
-mkdir -p videos/video_name/segments
-
-# Download each segment
-# Extract base URL from M3U8 URL
-BASE_URL="https://example.com/path/to/video"
-
-# For each segment in the M3U8:
-curl -o videos/video_name/segments/seg-1-v1-a1.ts "${BASE_URL}/seg-1-v1-a1.ts"
-curl -o videos/video_name/segments/seg-2-v1-a1.ts "${BASE_URL}/seg-2-v1-a1.ts"
-# ... repeat for all segments
-
-# Or use a loop for all segments:
-while IFS= read -r line; do
-    if [[ $line == *.ts ]]; then
-        filename=$(basename "$line")
-        curl -o "videos/video_name/segments/$filename" "${BASE_URL}/$line"
-        # Throttle to avoid overwhelming server
-        sleep 2
-    fi
-done < videos/video_name/index.m3u8
-```
-
-**Important considerations**:
-- **Throttling**: Add delays (2-10 seconds) between requests to be respectful to servers
-- **Resume capability**: Use `curl -C -` to resume interrupted downloads
-- **Authentication**: Some streams require cookies or tokens - capture these from HAR file
-- **Segment naming**: Usually follows pattern like `seg-N-v1-a1.ts` where N is the sequence number
+- **S**: Session/section number
+- **T**: Topic/chapter number within that session
+- Use hyphens (not spaces) in filenames
+- Keep filenames under 200 characters
 
 ---
 
-## Phase 2: Video Processing
+## Phase 1: Audio Extraction
 
-### Step 2.1: Combine TS Segments into Complete Video
+### Step 1.1: Extract Audio from Videos
 
-Once all segments are downloaded, combine them into a single MP4 file:
-
-#### Method 1: FFmpeg Concatenation (Recommended)
+Navigate to your project directory and run:
 
 ```bash
-# Create a file list for FFmpeg
-# This tells FFmpeg which files to combine and in what order
-cat > videos/video_name/concat.txt << EOF
-file 'segments/seg-1-v1-a1.ts'
-file 'segments/seg-2-v1-a1.ts'
-file 'segments/seg-3-v1-a1.ts'
-# ... list all segments in order
-EOF
+cd project
+mkdir -p audio
 
-# Run FFmpeg to concatenate
-ffmpeg -f concat -safe 0 -i videos/video_name/concat.txt \
-       -c copy \
-       videos/video_name/video_name.mp4
-```
+for video in videos/*.mp4; do
+    # Get the base filename without extension
+    basename=$(basename "$video" .mp4)
 
-**FFmpeg options explained**:
-
-- `-f concat`: Use the concat demuxer (file concatenation format)
-- `-safe 0`: Allow absolute file paths in concat file
-  - **Alternative**: Use relative paths and set `-safe 1` for stricter security
-  - **Use `-safe 0` when**: Paths contain special characters or absolute paths needed
-  - **Use `-safe 1` when**: All paths are relative and you want extra validation
-
-- `-i concat.txt`: Input file containing list of segments
-- `-c copy`: Copy streams without re-encoding
-  - **Pros**: Very fast (no re-encoding), preserves original quality
-  - **Cons**: Requires all segments to have identical codecs/parameters
-  - **Alternative**: `-c:v libx264 -c:a aac` to re-encode (slower but fixes compatibility issues)
-
-- Output: `videos/video_name/video_name.mp4`
-
-#### Method 2: Direct TS Concatenation (Simpler but less reliable)
-
-```bash
-# TS files can sometimes be concatenated directly
-cat videos/video_name/segments/seg-*.ts > videos/video_name/combined.ts
-
-# Then convert to MP4
-ffmpeg -i videos/video_name/combined.ts \
-       -c copy \
-       videos/video_name/video_name.mp4
-```
-
-**When to use**:
-- Use Method 1 (concat demuxer) for most cases - more reliable
-- Use Method 2 only if segments are simple and codec-compatible
-
-#### Auto-generating the Concat File
-
-```bash
-# Generate concat file automatically from segments directory
-cd videos/video_name
-ls segments/seg-*-v1-a1.ts | sort -V | \
-  awk '{print "file '\''" $0 "'\''"}' > concat.txt
-
-# Then run ffmpeg as shown above
-```
-
-**Sorting considerations**:
-- `sort -V`: Version sort (seg-1, seg-2, seg-10 sorts correctly)
-- Without `-V`: Lexical sort would give seg-1, seg-10, seg-2 (wrong order)
-
-### Step 2.2: Verify Video Integrity
-
-After combining, verify the output:
-
-```bash
-# Check video duration and properties
-ffprobe -v error \
-        -show_entries format=duration,size,bit_rate \
-        -show_entries stream=codec_name,codec_type \
-        -of default=noprint_wrappers=1 \
-        videos/video_name/video_name.mp4
-
-# Play the video to verify
-ffplay videos/video_name/video_name.mp4  # FFmpeg's built-in player
-# or
-vlc videos/video_name/video_name.mp4     # VLC media player
-```
-
-**What to check**:
-- Duration matches expected video length
-- No corruption or stuttering
-- Audio and video are synchronized
-
----
-
-## Phase 3: Audio Extraction
-
-### Step 3.1: Extract Audio from Video
-
-Convert video to audio-only format:
-
-```bash
-ffmpeg -i videos/video_name/video_name.mp4 \
-       -vn \
-       -acodec mp3 \
-       -ab 192k \
-       videos/video_name/video_name.mp3
-```
-
-**FFmpeg options explained**:
-
-- `-i input.mp4`: Input video file
-- `-vn`: Disable video recording (audio only)
-- `-acodec mp3`: Audio codec to use
-  - **Alternative codecs**:
-    - `libmp3lame`: Explicit MP3 encoder (same as `mp3` usually)
-    - `aac`: Better quality at same bitrate, more compatible
-    - `libopus`: Best quality/size ratio for modern players
-    - `libvorbis`: Open source, good quality
-    - `copy`: Copy audio without re-encoding (if already in desired format)
-
-- `-ab 192k` or `-b:a 192k`: Audio bitrate
-  - **Bitrate guidelines**:
-    - `64k`: Minimum for speech-only content (podcasts)
-    - `92k`: Good balance for audiobooks (recommended for final M4B)
-    - `128k`: Standard quality music/speech
-    - `192k`: High quality, used for intermediate processing
-    - `256k`: Very high quality, usually overkill for speech
-    - `320k`: Maximum for MP3
-
-  - **Pros/cons of different bitrates**:
-    - **Lower (64-92k)**: Smaller file size, acceptable for speech
-    - **Higher (192-256k)**: Better quality, larger files, preserves audio details
-
-- Output: `videos/video_name/video_name.mp3`
-
-### Step 3.2: Alternative Audio Formats
-
-```bash
-# Extract as AAC (better quality than MP3 at same bitrate)
-ffmpeg -i videos/video_name/video_name.mp4 \
-       -vn \
-       -acodec aac \
-       -b:a 128k \
-       videos/video_name/video_name.m4a
-
-# Extract as high-quality WAV (lossless, for further processing)
-ffmpeg -i videos/video_name/video_name.mp4 \
-       -vn \
-       -acodec pcm_s16le \
-       videos/video_name/video_name.wav
-
-# Copy audio stream without re-encoding (preserves original)
-ffmpeg -i videos/video_name/video_name.mp4 \
-       -vn \
-       -acodec copy \
-       videos/video_name/video_name.aac  # or .m4a depending on original codec
-```
-
-**When to use each format**:
-- **MP3**: Universal compatibility, good for intermediate files
-- **AAC/M4A**: Better quality than MP3, native format for M4B audiobooks
-- **WAV**: Lossless, use only for editing/processing, then convert to compressed format
-- **Copy**: Fastest, no quality loss, but format limited by source codec
-
-### Step 3.3: Audio Quality Adjustments
-
-```bash
-# Mono conversion (reduces file size, suitable for single speaker)
-ffmpeg -i input.mp4 -vn -acodec mp3 -ab 128k -ac 1 output.mp3
-
-# Stereo (keep both channels)
-ffmpeg -i input.mp4 -vn -acodec mp3 -ab 192k -ac 2 output.mp3
-
-# Normalize audio volume
-ffmpeg -i input.mp4 -vn -acodec mp3 -ab 192k -af loudnorm output.mp3
-
-# Apply audio filters
-ffmpeg -i input.mp4 -vn -acodec mp3 -ab 192k \
-       -af "highpass=f=100, lowpass=f=3000, loudnorm" \
-       output.mp3
-```
-
-**Audio options**:
-- `-ac 1`: Mono (1 channel)
-  - **Use when**: Single speaker, lecture content, saves 50% space
-- `-ac 2`: Stereo (2 channels)
-  - **Use when**: Music, spatial audio important
-
-- `-af loudnorm`: Loudness normalization filter
-  - **Purpose**: Makes all audio files similar volume level
-  - **Important for**: Audiobooks with multiple chapters from different sources
-  - **Alternative**: `-af volume=2.0` (simple volume multiplication)
-
-- **Audio filters** (`-af`):
-  - `highpass=f=100`: Remove low-frequency rumble (<100Hz)
-  - `lowpass=f=3000`: Remove high-frequency noise (>3000Hz)
-  - Combine filters with commas: `-af "filter1,filter2,filter3"`
-
-### Step 3.4: Batch Process All Videos
-
-```bash
-# Process all videos in the videos directory
-for video_dir in videos/*/; do
-    name=$(basename "$video_dir")
-    video_file="$video_dir/${name}.mp4"
-    audio_file="$video_dir/${name}.mp3"
-
-    if [ -f "$video_file" ] && [ ! -f "$audio_file" ]; then
-        echo "Processing: $name"
-        ffmpeg -i "$video_file" -vn -acodec mp3 -ab 192k "$audio_file"
-    fi
+    # Extract audio
+    ffmpeg -i "$video" \
+           -vn \
+           -acodec mp3 \
+           -ab 192k \
+           -y \
+           "audio/${basename}.mp3"
 done
 ```
 
+### Understanding the FFmpeg Options
+
+**Command breakdown**:
+```bash
+ffmpeg -i "$video" \        # Input video file
+       -vn \                # No video (audio only)
+       -acodec mp3 \        # Use MP3 codec
+       -ab 192k \           # Audio bitrate: 192 kbps
+       -y \                 # Overwrite if exists
+       "audio/output.mp3"   # Output file
+```
+
+**Why these settings?**
+
+- **`-vn`**: Disables video stream, only processes audio
+- **`-acodec mp3`**: MP3 is ideal for intermediate files (widely compatible)
+- **`-ab 192k`**: High quality for intermediate processing
+  - Speech remains clear even after re-encoding
+  - Good balance between quality and file size
+  - Alternative: `128k` for smaller files, `256k` for maximum quality
+
+### Step 1.2: Get Audio Duration Information
+
+For each extracted audio file, get its duration:
+
+```bash
+for audio in audio/*.mp3; do
+    duration=$(ffprobe -v error \
+                       -show_entries format=duration \
+                       -of default=noprint_wrappers=1:nokey=1 \
+                       "$audio")
+    echo "$(basename "$audio"): ${duration} seconds"
+done > audiobook/durations.txt
+```
+
+**Why track durations?**
+- Needed to calculate chapter start/end times
+- Helps estimate total audiobook length
+- Useful for progress tracking during encoding
+
 ---
 
-## Phase 4: Audiobook Creation
+## Phase 2: Metadata Preparation
 
-### Step 4.1: Prepare Chapter Information
+### Step 2.1: Create Metadata File (Optional but Recommended)
 
-Create a metadata file listing all chapters and their order:
-
-**File: `audiobook_metadata.json`**
+Create a JSON file `metadata.json` to track all course information:
 
 ```json
 {
+  "course_title": "Your Course Name",
+  "cover_image": "cover_art.jpg",
   "audiobook": {
-    "title": "Your Course Title",
+    "title": "Your Course Name",
     "author": "Instructor Name",
     "year": "2024",
     "genre": "Audiobook",
-    "description": "Description of the course content",
-    "language": "English"
+    "description": "Course description here",
+    "language": "en",
+    "publisher": "Publisher Name",
+    "copyright": "© 2024 Copyright Holder"
   },
-  "audio_settings": {
-    "bitrate": "92k",
-    "codec": "aac",
-    "channels": "mono"
-  },
-  "chapter_name_overrides": {
-    "intro_video": "Introduction",
-    "1_1_lesson": "1.1 First Lesson Title",
-    "1_2_lesson": "1.2 Second Lesson Title"
-  }
+  "sessions": [
+    {
+      "session_num": 1,
+      "session_title": "Introduction",
+      "topics": [
+        {
+          "topic_num": 1,
+          "topic_title": "Getting Started",
+          "audio_file": "S1T1-getting-started.mp3",
+          "duration_seconds": 667.5
+        }
+      ]
+    }
+  ]
 }
 ```
 
-**Field explanations**:
-- `bitrate`: "92k" is optimal for speech audiobooks (balance of quality/size)
-  - "64k": Minimum acceptable
-  - "128k": Higher quality, larger file
-- `codec`: "aac" is standard for M4B audiobooks
-- `channels`: "mono" for single speaker, "stereo" for music/multi-source
+### Step 2.2: Create Audio Concatenation List
 
-### Step 4.2: Create Concatenation List
+Create `audiobook/audio_concat.txt`:
 
-List all audio files in the desired order:
+```text
+file '/absolute/path/to/audio/S1T1-introduction.mp3'
+file '/absolute/path/to/audio/S1T2-getting-started.mp3'
+file '/absolute/path/to/audio/S1T3-key-concepts.mp3'
+```
+
+**Important notes**:
+- Use **absolute paths** (not relative)
+- One file per line
+- Format: `file '/path/to/file.mp3'` (with quotes)
+- Files are processed in order listed
+- Blank lines are ignored
+
+**To generate automatically**:
+```bash
+for audio in audio/*.mp3; do
+    echo "file '$(realpath "$audio")'"
+done > audiobook/audio_concat.txt
+```
+
+### Step 2.3: Create Chapter Markers File
+
+Create `audiobook/chapters.txt` in FFmpeg metadata format:
+
+```text
+;FFMETADATA1
+
+[CHAPTER]
+TIMEBASE=1/1000
+START=0
+END=667498
+title=S1T1: Introduction
+
+[CHAPTER]
+TIMEBASE=1/1000
+START=667498
+END=1335145
+title=S1T2: Getting Started
+```
+
+**Understanding the format**:
+- `;FFMETADATA1`: Required header
+- `TIMEBASE=1/1000`: Time is in milliseconds
+- `START`: Chapter start time in milliseconds
+- `END`: Chapter end time in milliseconds (= next chapter's START)
+- `title`: Chapter name displayed in players
+
+**Calculating timestamps**:
+```python
+# Example: Calculate cumulative timestamps
+current_time = 0.0
+for topic in topics:
+    duration = topic['duration_seconds']
+    start_ms = int(current_time * 1000)
+    end_ms = int((current_time + duration) * 1000)
+
+    print(f"[CHAPTER]")
+    print(f"TIMEBASE=1/1000")
+    print(f"START={start_ms}")
+    print(f"END={end_ms}")
+    print(f"title={topic['title']}")
+    print()
+
+    current_time += duration
+```
+
+---
+
+## Phase 3: Audiobook Assembly
+
+### Step 3.1: Concatenate and Encode to M4B
+
+This is the **longest step** in the process. For a 10-hour audiobook, expect 15-30 minutes.
 
 ```bash
-# Create file list for FFmpeg
-# Order matters - this becomes your audiobook chapter sequence
-cat > videos/audio_concat.txt << EOF
-file 'mbt_introduction/mbt_introduction.mp3'
-file '1_1_1_ttar/1_1_1_ttar.mp3'
-file '1_1_2_trauma/1_1_2_trauma.mp3'
-# ... list all audio files in chapter order
-EOF
-```
-
-**Important**:
-- Use absolute paths OR paths relative to concat file location
-- Order determines audiobook chapter sequence
-- Verify filenames match exactly (case-sensitive)
-
-### Step 4.3: Generate Chapter Timestamps
-
-You need chapter timestamps for the final audiobook. Calculate these by summing durations:
-
-```bash
-# Get duration of each audio file
-ffprobe -v error -show_entries format=duration \
-        -of default=noprint_wrappers=1:nokey=1 \
-        video_name/video_name.mp3
-```
-
-Create chapters file:
-
-**File: `videos/chapters.txt`**
-
-```
-00:00:00.000 Introduction
-00:15:23.456 1.1 First Lesson
-00:32:10.789 1.2 Second Lesson
-01:05:44.123 2.1 Third Lesson
-```
-
-**Format**: `HH:MM:SS.mmm Chapter Title`
-- Timestamps are cumulative (each chapter starts where previous ended)
-- Use 3 decimal places for milliseconds
-- First chapter always starts at 00:00:00.000
-
-#### Auto-generate Chapters File
-
-```bash
-# Script to auto-generate chapters.txt
-current_time=0
-
-while IFS= read -r line; do
-    if [[ $line =~ ^file\ \'(.*)\'$ ]]; then
-        filepath="${BASH_REMATCH[1]}"
-        duration=$(ffprobe -v error -show_entries format=duration \
-                   -of default=noprint_wrappers=1:nokey=1 "$filepath")
-
-        # Extract chapter name from filepath
-        filename=$(basename "$filepath" .mp3)
-        chapter_name=$(echo "$filename" | tr '_' ' ' | sed 's/\b\(.\)/\u\1/g')
-
-        # Format timestamp
-        hours=$((current_time / 3600))
-        minutes=$(( (current_time % 3600) / 60 ))
-        seconds=$(echo "$current_time % 60" | bc)
-        timestamp=$(printf "%02d:%02d:%06.3f" $hours $minutes $seconds)
-
-        echo "$timestamp $chapter_name"
-
-        # Add duration to running total
-        current_time=$(echo "$current_time + $duration" | bc)
-    fi
-done < videos/audio_concat.txt > videos/chapters.txt
-```
-
-### Step 4.4: Combine Audio Files into Single M4B
-
-Now create the M4B audiobook file:
-
-```bash
-# Step 1: Concatenate all audio files
-ffmpeg -f concat -safe 0 -i videos/audio_concat.txt \
+ffmpeg -f concat \
+       -safe 0 \
+       -i audiobook/audio_concat.txt \
        -c:a aac \
        -b:a 92k \
        -ac 1 \
        -vn \
        -f mp4 \
        -movflags +faststart \
-       videos/temp_audiobook.m4b
+       -progress pipe:1 \
+       -y \
+       audiobook/temp_audiobook.m4b
 ```
 
-**FFmpeg options for M4B creation**:
+### Understanding the Encoding Options
 
-- `-f concat`: Concatenate multiple files
-- `-safe 0`: Allow absolute paths
-
-- `-c:a aac`: Audio codec AAC (standard for audiobooks)
-  - AAC provides better quality than MP3 at lower bitrates
-  - Native format for M4B/M4A containers
-
-- `-b:a 92k`: Audio bitrate 92 kbps
-  - Optimal for speech-only audiobooks
-  - Balance between quality and file size
-  - Apple Books recommendation for audiobooks
-
-- `-ac 1`: Mono audio (1 channel)
-  - Reduces file size by ~50% vs stereo
-  - Perfect for single-speaker content
-  - Use `-ac 2` if stereo is important
-
-- `-vn`: No video stream
-  - Important even though source is audio - prevents any video metadata
-
-- `-f mp4`: Force MP4 container format
-  - M4B is an MP4 container with different extension
-  - Ensures proper container structure
-
-- `-movflags +faststart`: Optimize for streaming
-  - Moves metadata to beginning of file
-  - Allows playback to start before complete download
-  - **Pro**: Better user experience in audiobook players
-  - **Con**: Slightly increases processing time
-  - **Always use for audiobooks**
-
-### Step 4.5: Add Metadata to M4B
-
-Add audiobook information:
+**Command breakdown**:
 
 ```bash
-# Add metadata using FFmpeg
-ffmpeg -i videos/temp_audiobook.m4b \
+-f concat                    # Input format: concatenation
+-safe 0                      # Allow absolute paths
+-i audio_concat.txt          # Input: list of files to concatenate
+```
+
+**Audio codec settings**:
+```bash
+-c:a aac                     # Use AAC codec (best for audiobooks)
+-b:a 92k                     # Bitrate: 92 kbps
+-ac 1                        # Audio channels: 1 (mono)
+```
+
+**Output format**:
+```bash
+-vn                          # No video stream
+-f mp4                       # MP4 container (M4B is MP4)
+-movflags +faststart         # Optimize for streaming
+```
+
+**Progress monitoring**:
+```bash
+-progress pipe:1             # Output progress info
+```
+
+### Why These Settings?
+
+**AAC vs MP3**:
+- AAC has better quality at lower bitrates
+- Better suited for speech content
+- Native support in iOS/macOS audiobook apps
+
+**92k bitrate**:
+- Optimal for speech (voices remain clear)
+- Significantly smaller than music quality (128k-256k)
+- For comparison:
+  - 10 hours @ 92k = ~400 MB
+  - 10 hours @ 128k = ~550 MB
+  - 10 hours @ 192k = ~825 MB
+
+**Mono (1 channel)**:
+- Single speaker content doesn't need stereo
+- Reduces file size by ~50%
+- No quality loss for speech
+
+**faststart flag**:
+- Moves metadata to beginning of file
+- Allows streaming before full download
+- Essential for web/mobile playback
+
+### Monitoring Progress
+
+The `-progress pipe:1` flag outputs progress information:
+
+```
+frame=0
+fps=0.00
+stream_0_0_q=0.0
+total_size=0
+out_time_us=0
+out_time_ms=0
+out_time=00:00:00.000000
+dup_frames=0
+drop_frames=0
+speed=   0x
+progress=continue
+```
+
+Key field: **`out_time`** shows current position in output
+
+---
+
+## Phase 4: Adding Metadata
+
+### Step 4.1: Add Audiobook Metadata with FFmpeg
+
+```bash
+ffmpeg -i audiobook/temp_audiobook.m4b \
        -c copy \
        -metadata title="Your Course Title" \
        -metadata artist="Instructor Name" \
@@ -569,689 +429,856 @@ ffmpeg -i videos/temp_audiobook.m4b \
        -metadata genre="Audiobook" \
        -metadata comment="Course description here" \
        -metadata:s:a:0 media_type=2 \
-       videos/audiobook_with_metadata.m4b
+       -y \
+       audiobook/temp_with_metadata.m4b
 ```
 
-**Metadata fields explained**:
+### Understanding Metadata Fields
 
-- `title`: Audiobook title (shows in player)
-- `artist`: Author/narrator name
-- `album_artist`: Primary author (for library grouping)
-- `album`: Often same as title for audiobooks
+**Standard metadata**:
+- `title`: Audiobook title
+- `artist`: Narrator/instructor (shows as "Author" in most players)
+- `album_artist`: Same as artist (ensures proper grouping)
+- `album`: Album name (often same as title)
 - `date`: Publication year
-- `genre`: "Audiobook" for proper categorization
-- `comment`: Long-form description
+- `genre`: "Audiobook" or "Self-Help", "Education", etc.
+- `comment`: Description text
 
-- `media_type=2`: Critical for audiobooks
-  - `0` = Movie
-  - `1` = Music
-  - `2` = Audiobook
-  - `6` = Music Video
-  - `9` = Short Film
-  - `10` = TV Show
-  - **Set to 2** to make it appear in Audiobook section of players
-
-**Alternative tools for metadata**:
-
+**Critical setting**:
 ```bash
-# Using AtomicParsley (more audiobook-specific)
-AtomicParsley videos/audiobook.m4b \
-  --title "Course Title" \
-  --artist "Instructor" \
-  --album "Course Title" \
-  --genre "Audiobook" \
-  --year "2024" \
-  --stik Audiobook \
-  --comment "Description" \
-  --overWrite
-
-# Using MP4Box
-MP4Box -itags title="Course Title":artist="Instructor":album="Course Title" \
-       videos/audiobook.m4b
+-metadata:s:a:0 media_type=2
 ```
 
-### Step 4.6: Add Chapter Markers
+**What this does**:
+- Sets the audio stream's media type to "Audiobook" (type 2)
+- Required for iOS Books app to recognize file as audiobook
+- Without this, file appears as music/podcast
 
-This is the critical step that makes the audiobook navigable:
+**Media type values**:
+- 0 = Movie
+- 1 = Music
+- 2 = Audiobook
+- 6 = Music Video
+- 9 = Short Film
 
-#### Method 1: Using mp4chaps (Simplest)
-
-```bash
-# mp4chaps expects a chapters file with same base name as M4B
-# Format: audiobook.chapters.txt for audiobook.m4b
-
-cp videos/chapters.txt videos/audiobook.chapters.txt
-
-# Import chapters into M4B
-mp4chaps -i videos/audiobook.m4b
-
-# Verify chapters were added
-mp4chaps -l videos/audiobook.m4b
-```
-
-**mp4chaps options**:
-- `-i`: Import chapters from .chapters.txt file
-- `-l`: List chapters in file
-- `-e`: Export chapters to text file
-- `-r`: Remove all chapters
-- `-o`: Optimize (remove and re-add chapters)
-
-**Chapter file format for mp4chaps**:
-```
-00:00:00.000 Chapter 1 Title
-00:15:23.456 Chapter 2 Title
-00:32:10.789 Chapter 3 Title
-```
-
-#### Method 2: Using MP4Box (More compatible)
-
-```bash
-# Import chapters using MP4Box
-MP4Box -add videos/audiobook.m4b:chap=videos/chapters.txt \
-       videos/audiobook_chaptered.m4b
-
-# Or add to existing file
-MP4Box -chap videos/chapters.txt videos/audiobook.m4b
-```
-
-**MP4Box chapter options**:
-- `-add file:chap=chapters.txt`: Add audio with chapter file
-- `-chap chapters.txt`: Add chapters to existing file
-- `-chapter`: Alternative chapter import method
-
-**MP4Box chapter format** (more flexible):
-```
-CHAPTER01=00:00:00.000
-CHAPTER01NAME=Introduction
-CHAPTER02=00:15:23.456
-CHAPTER02NAME=Lesson 1.1
-```
-
-Or Nero format:
-```
-CHAPTER1=00:00:00.000
-CHAPTER1NAME=Introduction
-CHAPTER2=00:15:23.456
-CHAPTER2NAME=Lesson 1.1
-```
-
-#### Method 3: Using FFmpeg Metadata File (Most compatible)
-
-```bash
-# Create FFmpeg metadata file
-cat > videos/ffmpeg_metadata.txt << EOF
-;FFMETADATA1
-
-[CHAPTER]
-TIMEBASE=1/1000
-START=0
-END=923456
-title=Introduction
-
-[CHAPTER]
-TIMEBASE=1/1000
-START=923456
-END=1930789
-title=1.1 First Lesson
-
-[CHAPTER]
-TIMEBASE=1/1000
-START=1930789
-END=3944123
-title=1.2 Second Lesson
-EOF
-
-# Apply metadata with chapters
-ffmpeg -i videos/audiobook_with_metadata.m4b \
-       -i videos/ffmpeg_metadata.txt \
-       -map_metadata 1 \
-       -map_chapters 1 \
-       -c copy \
-       videos/audiobook_final.m4b
-```
-
-**FFmpeg metadata format**:
-- `;FFMETADATA1`: Required header
-- `TIMEBASE=1/1000`: Millisecond precision
-- `START`: Chapter start in milliseconds
-- `END`: Chapter end in milliseconds
-- `title`: Chapter name
-
-**Converting timestamps to milliseconds**:
-```bash
-# HH:MM:SS.mmm to milliseconds
-# Example: 00:15:23.456 = (15*60 + 23)*1000 + 456 = 923456
-
-# Conversion formula:
-ms = (hours * 3600 + minutes * 60 + seconds) * 1000 + milliseconds
-```
-
-### Step 4.7: Set Audiobook Atom
-
-Final step to ensure it's recognized as an audiobook:
-
-```bash
-# Using AtomicParsley to set media type
-AtomicParsley videos/audiobook_final.m4b \
-  --stik Audiobook \
-  --overWrite
-
-# Verify it worked
-AtomicParsley videos/audiobook_final.m4b -t
-```
-
-**Media type values** (`--stik`):
-- `Movie`: Video content
-- `Normal`: Music
-- `Audiobook`: Audiobook (this is what you want)
-- `Music Video`: Music videos
-- `TV Show`: TV episodes
-- `Booklet`: PDF booklet
-
-### Step 4.8: Rename to Final Name
-
-```bash
-# Rename to clean filename
-mv videos/audiobook_final.m4b videos/your_course_title.m4b
-```
+**Copy codec** (`-c copy`):
+- Does NOT re-encode audio
+- Only updates metadata
+- Very fast (seconds, not minutes)
+- No quality loss
 
 ---
 
-## Phase 5: Chapter Enhancement
+## Phase 5: Chapter Markers
 
-### Understanding Chapter Compatibility Issues
-
-Different audiobook players support chapters differently:
-- **Apple Books (iOS)**: Very strict, requires specific chapter format
-- **Audiobook apps (BookPlayer, Prologue)**: May have compatibility issues
-- **Desktop players (VLC, iTunes)**: Usually more forgiving
-
-### Step 5.1: Verify Chapters
-
-Before distribution, verify chapters work:
+### Step 5.1: Embed Chapter Markers
 
 ```bash
-# Method 1: Use mp4chaps to list chapters
-mp4chaps -l videos/your_course_title.m4b
-
-# Method 2: Use ffprobe to check chapters
-ffprobe -v quiet -print_format json -show_chapters \
-        videos/your_course_title.m4b
-
-# Method 3: Use MP4Box
-MP4Box -info videos/your_course_title.m4b | grep -A 20 Chapter
-```
-
-Expected output should show all chapter names and timestamps.
-
-### Step 5.2: Fix Chapter Compatibility Issues
-
-If chapters don't work on iOS:
-
-#### Method A: Convert to Nero Chapter Format
-
-```bash
-# Extract chapters
-MP4Box -dump-chap-ogg videos/your_course_title.m4b \
-       -out videos/chapters_nero.txt
-
-# Remove old chapters and add in Nero format
-MP4Box videos/your_course_title.m4b -rem 3 \
-       -out videos/temp_no_chapters.m4b
-
-MP4Box videos/temp_no_chapters.m4b \
-       -add videos/your_course_title.m4b:chap \
-       -chap videos/chapters_nero.txt \
-       -new videos/your_course_title_fixed.m4b
-
-# Clean up
-rm videos/temp_no_chapters.m4b
-```
-
-**MP4Box track numbers**:
-- Track 1: Usually audio
-- Track 2: Sometimes video/metadata
-- Track 3: Often chapters
-- Use `-info` to identify tracks: `MP4Box -info file.m4b`
-
-#### Method B: Rebuild with FFmpeg Chapter Metadata
-
-```bash
-# Extract existing chapters
-ffprobe -v quiet -print_format json -show_chapters \
-        videos/your_course_title.m4b > chapters.json
-
-# Create FFmpeg metadata file from JSON
-# (manually or with script - see previous FFmpeg metadata format)
-
-# Rebuild with embedded chapters
-ffmpeg -i videos/your_course_title.m4b \
-       -i videos/ffmpeg_metadata.txt \
-       -map_metadata 1 \
+ffmpeg -i audiobook/temp_with_metadata.m4b \
+       -i audiobook/chapters.txt \
+       -map 0 \
+       -map_metadata 0 \
        -map_chapters 1 \
        -c copy \
-       -f mp4 \
-       videos/your_course_title_fixed.m4b
+       -y \
+       audiobook/temp_with_chapters.m4b
 ```
 
-### Step 5.3: Alternative Chapter Methods
+### Understanding Chapter Mapping
 
-If standard methods fail:
+**Multiple inputs**:
+```bash
+-i temp_with_metadata.m4b    # Input 0: M4B with audio and metadata
+-i chapters.txt              # Input 1: Chapter markers
+```
 
-#### Using QuickTime Chapter Track
+**Mapping strategy**:
+```bash
+-map 0                       # Copy all streams from input 0 (audio)
+-map_metadata 0              # Keep metadata from input 0 (title, artist, etc.)
+-map_chapters 1              # Add chapters from input 1 (chapters.txt)
+```
 
-Some players support QuickTime chapter tracks:
+**Why this order matters**:
+- `-map_metadata 0`: Preserves title, artist, genre, etc.
+- `-map_chapters 1`: Adds chapters WITHOUT overwriting metadata
+- Using `-map_metadata 1` would REPLACE all metadata with only chapters
+
+**Copy codec** (`-c copy`):
+- No re-encoding (fast, no quality loss)
+- Only modifies container metadata
+
+### Verifying Chapters
+
+Check if chapters were added:
 
 ```bash
-# Create QuickTime chapter track using MP4Box
-MP4Box -add videos/your_course_title.m4b \
-       -add videos/chapters.txt:chap:name=Chapters \
-       videos/output_with_qt_chapters.m4b
+ffprobe -v quiet \
+        -print_format json \
+        -show_chapters \
+        audiobook/temp_with_chapters.m4b
 ```
 
-#### Using Cue Points (Podcast-style)
-
-```bash
-# Add cue points as metadata
-ffmpeg -i input.m4b \
-       -metadata chapter_00_start="00:00:00.000" \
-       -metadata chapter_00_title="Introduction" \
-       -metadata chapter_01_start="00:15:23.456" \
-       -metadata chapter_01_title="Chapter 1" \
-       -c copy output.m4b
-```
-
----
-
-## Metadata Configuration
-
-### Sample audiobook_metadata.json
-
+Output should show:
 ```json
 {
-  "audiobook": {
-    "title": "Complete Video Course Audiobook",
-    "author": "Dr. Jane Expert",
-    "year": "2024",
-    "genre": "Educational",
-    "description": "Comprehensive course covering advanced topics in detail",
-    "language": "en-US",
-    "publisher": "Self Published",
-    "copyright": "© 2024 Author Name"
-  },
-  "audio_settings": {
-    "bitrate": "92k",
-    "codec": "aac",
-    "channels": "mono",
-    "sample_rate": "44100"
-  },
-  "chapter_name_overrides": {
-    "intro": "Introduction to the Course",
-    "1_1_overview": "1.1 Course Overview",
-    "1_2_basics": "1.2 Fundamental Concepts",
-    "2_1_advanced": "2.1 Advanced Techniques"
-  }
+  "chapters": [
+    {
+      "id": 0,
+      "time_base": "1/1000",
+      "start": 0,
+      "start_time": "0.000000",
+      "end": 667498,
+      "end_time": "667.498000",
+      "tags": {
+        "title": "S1T1: Introduction"
+      }
+    },
+    ...
+  ]
 }
 ```
 
-### Automatic Chapter Name Generation
+---
 
-Chapter names can be auto-generated from filenames:
+## Phase 6: Cover Art and Final Touches
 
-**Pattern examples**:
-- `mbt_introduction` → "Introduction"
-- `1_1_2_trauma` → "1.1.2 Trauma"
-- `1_3_3_embodiment_practices` → "1.3.3 Embodiment Practices"
+### Step 6.1: Prepare Cover Image
 
-**Conversion rules**:
-1. Special case: `mbt_introduction` → "Introduction"
-2. Parse pattern: `{chapter}_{section}_{lesson}_{title}`
-3. Convert underscores to spaces
-4. Title case each word
-5. Format as: "{chapter}.{section}.{lesson} {Title}"
+**Recommended specifications**:
+- **Format**: JPG or PNG
+- **Size**: 600x600 pixels minimum, 3000x3000 maximum
+- **Aspect ratio**: 1:1 (square)
+- **File size**: Under 1 MB
+- **Color space**: RGB
+
+**Resize image if needed**:
+```bash
+# Using ImageMagick
+convert cover_art.jpg -resize 600x600 -quality 90 cover_art_resized.jpg
+
+# Using FFmpeg
+ffmpeg -i cover_art.jpg -vf scale=600:600 cover_art_resized.jpg
+```
+
+### Step 6.2: Add Cover Art
+
+```bash
+AtomicParsley audiobook/temp_with_chapters.m4b \
+              --artwork cover_art.jpg \
+              --overWrite
+```
+
+**What happens**:
+- Embeds image as MP4 artwork atom
+- Image shows in all audiobook players
+- `--overWrite`: Replaces original file (no separate output)
+
+### Step 6.3: Set Audiobook Type Flag
+
+```bash
+AtomicParsley audiobook/temp_with_chapters.m4b \
+              --stik Audiobook \
+              --overWrite
+```
+
+**What `--stik` does**:
+- Sets the "content type" in iTunes metadata
+- Value "Audiobook" tells apps how to handle the file
+- Different from the media_type we set earlier (both are needed)
+
+**Available values**:
+- Movie
+- Music
+- Audiobook
+- Music Video
+- TV Show
+
+### Step 6.4: Create Final File
+
+```bash
+mv audiobook/temp_with_chapters.m4b audiobook/Final_Audiobook.m4b
+```
+
+Or rename to match your content:
+```bash
+mv audiobook/temp_with_chapters.m4b "audiobook/Course_Name_2024.m4b"
+```
+
+### Step 6.5: Cleanup Temporary Files
+
+```bash
+rm audiobook/temp_audiobook.m4b
+rm audiobook/temp_with_metadata.m4b
+```
+
+Keep these for reference:
+- `audio_concat.txt`
+- `chapters.txt`
+- `durations.txt`
 
 ---
 
 ## Troubleshooting
 
-### Issue: Chapters Don't Appear on iOS
+### Audio Extraction Issues
 
-**Symptoms**: M4B plays fine but no chapter markers in Apple Books or BookPlayer
+**Problem**: FFmpeg fails with "Unknown encoder 'mp3'"
 
-**Solutions**:
-1. Verify media_type is set to 2 (Audiobook):
-   ```bash
-   AtomicParsley file.m4b -t | grep stik
-   ```
-
-2. Try different chapter method (mp4chaps vs MP4Box vs FFmpeg)
-
-3. Use Nero chapter format:
-   ```bash
-   MP4Box -dump-chap-ogg file.m4b -out chapters.txt
-   # Edit to Nero format
-   MP4Box file.m4b -chap chapters.txt
-   ```
-
-4. Ensure chapter timestamps don't overlap or have gaps
-
-### Issue: Audio/Video Out of Sync
-
-**Symptoms**: Audio doesn't match video or has gaps
-
-**Solutions**:
-1. Re-encode instead of copying streams:
-   ```bash
-   ffmpeg -f concat -safe 0 -i concat.txt \
-          -c:v libx264 -c:a aac -b:a 192k \
-          output.mp4
-   ```
-
-2. Fix timestamps:
-   ```bash
-   ffmpeg -fflags +genpts -i input.mp4 -c copy output.mp4
-   ```
-
-3. Check segment compatibility:
-   ```bash
-   # Verify all segments have same codec
-   for f in segments/*.ts; do
-       ffprobe -v error -select_streams v:0 \
-               -show_entries stream=codec_name \
-               -of default=nokey=1:noprint_wrappers=1 "$f"
-   done
-   ```
-
-### Issue: Large File Size
-
-**Symptoms**: Final M4B is too large
-
-**Solutions**:
-1. Reduce bitrate:
-   ```bash
-   # From 192k to 92k
-   ffmpeg -i input.m4b -c:a aac -b:a 92k -vn output.m4b
-   ```
-
-2. Convert to mono:
-   ```bash
-   ffmpeg -i input.m4b -c:a aac -ac 1 -b:a 64k output.m4b
-   ```
-
-3. Lower sample rate:
-   ```bash
-   ffmpeg -i input.m4b -c:a aac -ar 22050 -b:a 64k output.m4b
-   ```
-
-**File size comparison** (for 10-hour audiobook):
-- Stereo 192k: ~1.7 GB
-- Stereo 128k: ~1.1 GB
-- Mono 92k: ~400 MB (recommended)
-- Mono 64k: ~280 MB (minimum acceptable)
-
-### Issue: Segments Download Fails
-
-**Symptoms**: Some TS segments won't download or return 403/404 errors
-
-**Solutions**:
-1. Add proper headers:
-   ```bash
-   curl -H "User-Agent: Mozilla/5.0" \
-        -H "Referer: https://course-site.com" \
-        -H "Origin: https://course-site.com" \
-        -o segment.ts \
-        "https://cdn.example.com/segment.ts"
-   ```
-
-2. Check for authentication tokens in HAR file:
-   ```bash
-   # Look for Authorization headers or cookies
-   # Add them to curl command:
-   curl -H "Cookie: session=abc123..." \
-        -o segment.ts "URL"
-   ```
-
-3. Try different quality stream (lower resolution URL)
-
-### Issue: FFmpeg Not Found
-
-**Symptoms**: `ffmpeg: command not found`
-
-**Solutions**:
+**Solution**: Install with MP3 support:
 ```bash
 # Ubuntu/Debian
-sudo apt update
-sudo apt install ffmpeg
+sudo apt install ffmpeg libmp3lame0
 
-# macOS with Homebrew
-brew install ffmpeg
-
-# Check installation
-ffmpeg -version
+# macOS
+brew reinstall ffmpeg --with-lame
 ```
-
-### Issue: Metadata Not Showing
-
-**Symptoms**: Audiobook plays but shows no title/author
-
-**Solutions**:
-1. Verify metadata was added:
-   ```bash
-   ffprobe -v error -show_format file.m4b | grep TAG
-   ```
-
-2. Re-apply metadata:
-   ```bash
-   AtomicParsley file.m4b \
-     --title "Title" \
-     --artist "Author" \
-     --stik Audiobook \
-     --overWrite
-   ```
-
-3. Check player compatibility (some players don't read all metadata fields)
-
-### Issue: Audiobook Won't Import to iTunes/Books
-
-**Symptoms**: File rejected when importing
-
-**Solutions**:
-1. Ensure file extension is `.m4b` (not `.m4a` or `.mp4`)
-
-2. Verify it's a valid MP4 container:
-   ```bash
-   ffprobe file.m4b  # Should not show errors
-   ```
-
-3. Set audiobook media type:
-   ```bash
-   AtomicParsley file.m4b --stik Audiobook --overWrite
-   ```
-
-4. Rebuild file with correct settings:
-   ```bash
-   ffmpeg -i broken.m4b \
-          -c:a aac -b:a 92k \
-          -f mp4 -movflags +faststart \
-          fixed.m4b
-   ```
 
 ---
 
-## Advanced Tips
+**Problem**: Extracted audio is very quiet
+
+**Solution**: Add volume normalization:
+```bash
+ffmpeg -i video.mp4 -vn -acodec mp3 -ab 192k -af "volume=1.5" output.mp3
+```
+
+Adjust `1.5` as needed (1.0 = no change, 2.0 = double volume)
+
+---
+
+### Concatenation Issues
+
+**Problem**: "Unsafe file name" error
+
+**Solution**: Add `-safe 0` flag:
+```bash
+ffmpeg -f concat -safe 0 -i audio_concat.txt ...
+```
+
+---
+
+**Problem**: Audio files play in wrong order
+
+**Solution**: Check `audio_concat.txt`:
+- Ensure files are listed in correct order
+- Use absolute paths
+- Verify paths exist: `cat audio_concat.txt | cut -d"'" -f2 | xargs ls -l`
+
+---
+
+**Problem**: Gaps or clicks between chapters
+
+**Solution**: This usually indicates mismatched audio formats. Re-extract all audio with identical settings:
+```bash
+ffmpeg -i video.mp4 -vn -acodec mp3 -ab 192k -ar 44100 output.mp3
+```
+
+The `-ar 44100` ensures consistent sample rate.
+
+---
+
+### Chapter Issues
+
+**Problem**: Chapters don't appear in player
+
+**Solution**:
+1. Verify chapters file format (must start with `;FFMETADATA1`)
+2. Check timestamp calculations (END of one = START of next)
+3. Ensure `-map_chapters 1` references correct input
+4. Test with VLC: File → Information → Codec Details
+
+---
+
+**Problem**: Chapter timestamps are off
+
+**Cause**: Calculated durations don't match actual audio
+
+**Solution**: Get precise durations:
+```bash
+for audio in audio/*.mp3; do
+    ffprobe -v error -show_entries format=duration \
+            -of default=noprint_wrappers=1:nokey=1 "$audio"
+done
+```
+
+Recalculate chapter timestamps with exact values.
+
+---
+
+### Metadata Issues
+
+**Problem**: Metadata doesn't show in player
+
+**Solution**: Some players cache metadata. Try:
+1. Reimport the file
+2. Clear player cache
+3. Test in different player (VLC, iTunes, BookPlayer)
+
+---
+
+**Problem**: Title shows but not author
+
+**Solution**: Set both `artist` and `album_artist`:
+```bash
+-metadata artist="Name" -metadata album_artist="Name"
+```
+
+---
+
+### Cover Art Issues
+
+**Problem**: AtomicParsley: "command not found"
+
+**Solution**: Install AtomicParsley:
+```bash
+# Ubuntu/Debian
+sudo apt install atomicparsley
+
+# macOS
+brew install atomicparsley
+```
+
+---
+
+**Problem**: Cover art too large / file size increased dramatically
+
+**Solution**: Resize image before embedding:
+```bash
+ffmpeg -i cover.jpg -vf scale=600:600 cover_small.jpg
+```
+
+Target: 600x600 pixels, under 500 KB
+
+---
+
+**Problem**: Cover art doesn't display
+
+**Solution**:
+1. Verify image format (JPG/PNG only)
+2. Check aspect ratio (should be square)
+3. Try re-embedding with different image
+4. Some players require both artwork and stik type set
+
+---
+
+### File Size Issues
+
+**Problem**: Final file is too large
+
+**Solutions**:
+1. Lower bitrate: `-b:a 64k` (minimum for speech)
+2. Ensure mono: `-ac 1`
+3. Check if video accidentally included: Use `-vn`
+
+**Typical sizes**:
+- 10 hours @ 64k mono = ~275 MB
+- 10 hours @ 92k mono = ~395 MB
+- 10 hours @ 128k stereo = ~1100 MB
+
+---
+
+**Problem**: Final file won't play on iOS
+
+**Solution**: Ensure:
+1. File extension is `.m4b`
+2. Container is MP4: `-f mp4`
+3. Codec is AAC: `-c:a aac`
+4. Media type set: `-metadata:s:a:0 media_type=2`
+5. Stik type set: `--stik Audiobook`
+
+---
+
+### Performance Issues
+
+**Problem**: Encoding is extremely slow
+
+**Solutions**:
+1. Check CPU usage: `top` or `htop`
+2. Use hardware acceleration (if available):
+```bash
+ffmpeg -hwaccel auto -i input ... output
+```
+3. Lower quality temporarily for testing: `-b:a 64k`
+4. Process in parallel (split into sections)
+
+---
+
+**Problem**: Running out of disk space
+
+**Solution**:
+1. Extract audio directly to M4B (skip MP3 intermediate)
+2. Process in batches, deleting videos after extraction
+3. Use lower bitrate for extraction: `-ab 128k`
+
+---
+
+## Technical Reference
+
+### Complete Command Summary
+
+**1. Extract audio from all videos**:
+```bash
+for video in videos/*.mp4; do
+    ffmpeg -i "$video" -vn -acodec mp3 -ab 192k -y "audio/$(basename "$video" .mp4).mp3"
+done
+```
+
+**2. Create concatenation list**:
+```bash
+for audio in audio/*.mp3; do echo "file '$(realpath "$audio")'"; done > audiobook/audio_concat.txt
+```
+
+**3. Create chapters file** (manual or scripted based on durations)
+
+**4. Concatenate and encode**:
+```bash
+ffmpeg -f concat -safe 0 -i audiobook/audio_concat.txt \
+       -c:a aac -b:a 92k -ac 1 -vn -f mp4 -movflags +faststart \
+       -y audiobook/temp_audiobook.m4b
+```
+
+**5. Add metadata**:
+```bash
+ffmpeg -i audiobook/temp_audiobook.m4b -c copy \
+       -metadata title="Title" \
+       -metadata artist="Author" \
+       -metadata album_artist="Author" \
+       -metadata album="Title" \
+       -metadata date="2024" \
+       -metadata genre="Audiobook" \
+       -metadata:s:a:0 media_type=2 \
+       -y audiobook/temp_with_metadata.m4b
+```
+
+**6. Add chapters**:
+```bash
+ffmpeg -i audiobook/temp_with_metadata.m4b -i audiobook/chapters.txt \
+       -map 0 -map_metadata 0 -map_chapters 1 -c copy \
+       -y audiobook/temp_with_chapters.m4b
+```
+
+**7. Add cover art and set type**:
+```bash
+AtomicParsley audiobook/temp_with_chapters.m4b --artwork cover.jpg --overWrite
+AtomicParsley audiobook/temp_with_chapters.m4b --stik Audiobook --overWrite
+```
+
+**8. Rename to final**:
+```bash
+mv audiobook/temp_with_chapters.m4b audiobook/Final_Audiobook.m4b
+```
+
+---
+
+### FFmpeg Options Reference
+
+#### Audio Codec Options
+- `-acodec mp3` or `-c:a mp3`: Use MP3 codec
+- `-acodec aac` or `-c:a aac`: Use AAC codec
+- `-c copy`: Copy without re-encoding
+
+#### Bitrate Options
+- `-ab 64k` or `-b:a 64k`: 64 kbps (minimum for speech)
+- `-ab 92k` or `-b:a 92k`: 92 kbps (optimal for audiobooks)
+- `-ab 128k` or `-b:a 128k`: 128 kbps (high quality speech)
+- `-ab 192k` or `-b:a 192k`: 192 kbps (very high quality)
+
+#### Channel Options
+- `-ac 1`: Mono (1 channel)
+- `-ac 2`: Stereo (2 channels)
+
+#### Sample Rate Options
+- `-ar 22050`: 22.05 kHz (low quality)
+- `-ar 44100`: 44.1 kHz (standard)
+- `-ar 48000`: 48 kHz (high quality)
+
+#### Container Options
+- `-f mp4`: MP4 container (for M4B)
+- `-f mp3`: MP3 container
+- `-movflags +faststart`: Optimize MP4 for streaming
+
+#### Stream Selection
+- `-vn`: No video
+- `-an`: No audio
+- `-map 0`: Map all streams from input 0
+- `-map 0:a`: Map only audio from input 0
+
+---
+
+### AtomicParsley Options Reference
+
+#### Artwork
+```bash
+--artwork /path/to/image.jpg    # Add cover art
+```
+
+#### Media Type
+```bash
+--stik Audiobook                # Set as audiobook
+--stik Music                    # Set as music
+--stik Movie                    # Set as movie
+```
+
+#### Metadata
+```bash
+--title "Title"                 # Set title
+--artist "Artist"               # Set artist
+--album "Album"                 # Set album
+--year "2024"                   # Set year
+--genre "Genre"                 # Set genre
+--comment "Description"         # Set description
+```
+
+#### Other Options
+```bash
+--overWrite                     # Modify file in-place
+--output /path/to/output.m4b    # Write to new file
+```
+
+---
+
+### Quality vs File Size Guide
+
+**For 1 hour of content**:
+
+| Bitrate | Channels | File Size | Quality | Use Case |
+|---------|----------|-----------|---------|----------|
+| 32k | Mono | 14 MB | Poor | Not recommended |
+| 64k | Mono | 28 MB | Acceptable | Limited storage |
+| 92k | Mono | 40 MB | Good | **Recommended** |
+| 128k | Mono | 56 MB | Very Good | High quality |
+| 96k | Stereo | 85 MB | Good | Music/ambience |
+| 128k | Stereo | 110 MB | Very Good | Music content |
+
+**For 10-hour audiobook**:
+- 64k mono: ~275 MB
+- 92k mono: ~395 MB
+- 128k mono: ~550 MB
+
+---
+
+### File Format Comparison
+
+| Format | Codec | Container | Chapters | Metadata | iOS Support | Android |
+|--------|-------|-----------|----------|----------|-------------|---------|
+| M4B | AAC | MP4 | Yes | Full | Excellent | Good |
+| M4A | AAC | MP4 | Yes | Full | Good | Good |
+| MP3 | MP3 | MP3 | Limited | Limited | Good | Excellent |
+| OGG | Vorbis | OGG | Yes | Good | Poor | Good |
+
+**Why M4B?**
+- Native iOS audiobook format
+- Better compression than MP3
+- Full chapter support
+- Complete metadata support
+- Recognized by audiobook apps
+
+---
+
+### Metadata Fields Mapping
+
+| FFmpeg Field | AtomicParsley | iTunes/iOS Display | Purpose |
+|--------------|---------------|-------------------|---------|
+| title | --title | Title | Audiobook title |
+| artist | --artist | Author | Narrator/author name |
+| album_artist | --albumArtist | Album Artist | Same as artist |
+| album | --album | Album | Usually same as title |
+| date | --year | Year | Publication year |
+| genre | --genre | Genre | Category |
+| comment | --comment | Description | Long description |
+| media_type=2 | --stik Audiobook | Media Type | Audiobook flag |
+
+---
+
+## Advanced Techniques
 
 ### Batch Processing Multiple Courses
 
-```bash
-# Process entire directory tree
-find videos -name "*.mp4" -type f | while read video; do
-    audio="${video%.mp4}.mp3"
-    if [ ! -f "$audio" ]; then
-        ffmpeg -i "$video" -vn -acodec mp3 -ab 192k "$audio"
-    fi
-done
-```
-
-### Creating Chapter Thumbnails
-
-Some players support chapter artwork:
-
-```bash
-# Extract frame at each chapter point
-ffmpeg -i video.mp4 -ss 00:15:23 -vframes 1 chapter1.jpg
-
-# Add artwork to chapter (using MP4Box)
-MP4Box -add video.m4b:name=Audio \
-       -add chapter1.jpg:name=Chapter1Cover \
-       output.m4b
-```
-
-### Quality Testing
-
-```bash
-# Compare audio quality
-# Extract 30-second samples at different bitrates
-for bitrate in 64k 92k 128k 192k; do
-    ffmpeg -i source.mp3 -ss 00:05:00 -t 30 \
-           -acodec aac -b:a $bitrate \
-           test_${bitrate}.m4a
-done
-
-# Listen and compare file sizes
-ls -lh test_*.m4a
-```
-
-### Automated Pipeline Script
+Process multiple courses in parallel:
 
 ```bash
 #!/bin/bash
-# Complete audiobook creation pipeline
-
-VIDEO_DIR="videos"
-OUTPUT_DIR="audiobooks"
-
-# 1. Extract all audio
-for dir in "$VIDEO_DIR"/*/; do
-    name=$(basename "$dir")
-    ffmpeg -i "$dir/${name}.mp4" -vn -acodec mp3 -ab 192k "$dir/${name}.mp3"
+for course_dir in courses/*/; do
+    (
+        cd "$course_dir"
+        ./extract_audio.sh
+        ./create_audiobook.sh
+    ) &
 done
-
-# 2. Create concat list
-find "$VIDEO_DIR" -name "*.mp3" -type f | sort | \
-    awk '{print "file '\''" $0 "'\''"}' > "$VIDEO_DIR/concat.txt"
-
-# 3. Generate chapters
-# (use timestamp calculation script from earlier)
-
-# 4. Build M4B
-ffmpeg -f concat -safe 0 -i "$VIDEO_DIR/concat.txt" \
-       -c:a aac -b:a 92k -ac 1 -vn \
-       -f mp4 -movflags +faststart \
-       "$OUTPUT_DIR/temp.m4b"
-
-# 5. Add metadata
-AtomicParsley "$OUTPUT_DIR/temp.m4b" \
-  --title "Course Title" \
-  --artist "Author" \
-  --stik Audiobook \
-  --overWrite
-
-# 6. Add chapters
-cp "$VIDEO_DIR/chapters.txt" "$OUTPUT_DIR/temp.chapters.txt"
-mp4chaps -i "$OUTPUT_DIR/temp.m4b"
-
-# 7. Rename final file
-mv "$OUTPUT_DIR/temp.m4b" "$OUTPUT_DIR/course_title.m4b"
-
-echo "Audiobook created: $OUTPUT_DIR/course_title.m4b"
+wait
 ```
 
----
+### Variable Bitrate (VBR) Encoding
 
-## Reference Tables
-
-### Audio Codec Comparison
-
-| Codec | Quality | File Size | Compatibility | Use Case |
-|-------|---------|-----------|---------------|----------|
-| AAC | Excellent | Small | High | **Recommended for M4B** |
-| MP3 | Good | Medium | Universal | Intermediate files |
-| Opus | Excellent | Smallest | Medium | Modern players |
-| Vorbis | Good | Small | Medium | Open source preference |
-| WAV | Perfect | Very Large | High | Editing/processing only |
-
-### Bitrate Recommendations
-
-| Content Type | Minimum | Recommended | High Quality |
-|--------------|---------|-------------|--------------|
-| Speech (mono) | 64k | 92k | 128k |
-| Speech (stereo) | 96k | 128k | 192k |
-| Music/Mixed | 128k | 192k | 256k |
-
-### File Size Estimates (10-hour audiobook)
-
-| Settings | File Size | Quality |
-|----------|-----------|---------|
-| Mono 64k AAC | 280 MB | Acceptable |
-| Mono 92k AAC | 400 MB | **Recommended** |
-| Stereo 128k AAC | 560 MB | High |
-| Stereo 192k AAC | 850 MB | Very High |
-
-### FFmpeg Speed Presets
-
-| Preset | Speed | Quality | Use When |
-|--------|-------|---------|----------|
-| ultrafast | Fastest | Lowest | Testing |
-| fast | Fast | Good | Quick processing |
-| medium | Medium | Good | **Default** |
-| slow | Slow | Better | Final output |
-| veryslow | Slowest | Best | Maximum quality needed |
-
----
-
-## Appendix: Common Command Reference
-
-### Quick Command Reference
+For better quality at similar file sizes:
 
 ```bash
-# Extract audio from video
-ffmpeg -i input.mp4 -vn -acodec mp3 -ab 192k output.mp3
+ffmpeg -i input.mp3 -c:a aac -q:a 2 -ac 1 output.m4b
+```
 
-# Combine videos
-ffmpeg -f concat -safe 0 -i concat.txt -c copy output.mp4
+Quality scale: 0 (highest) to 9 (lowest), 2 ≈ 128k CBR
 
-# Create M4B audiobook
-ffmpeg -f concat -safe 0 -i concat.txt \
-       -c:a aac -b:a 92k -ac 1 \
-       -f mp4 -movflags +faststart output.m4b
+### Adding Silence Between Chapters
 
-# Add chapters
-mp4chaps -i audiobook.m4b
+```bash
+# Create 2 seconds of silence
+ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 2 silence.mp3
 
-# Set audiobook type
-AtomicParsley audiobook.m4b --stik Audiobook --overWrite
+# Modify concat list to include silence between chapters
+file 'chapter1.mp3'
+file 'silence.mp3'
+file 'chapter2.mp3'
+file 'silence.mp3'
+```
 
-# Get media info
-ffprobe -v error -show_format -show_streams file.m4b
+### Speed Adjustment
 
-# List chapters
-mp4chaps -l audiobook.m4b
-ffprobe -v quiet -print_format json -show_chapters audiobook.m4b
+Speed up or slow down content:
+
+```bash
+# 1.25x speed (25% faster)
+ffmpeg -i input.mp3 -filter:a "atempo=1.25" output.mp3
+
+# For changes > 2x, chain filters:
+# 2.5x = 2.0 * 1.25
+ffmpeg -i input.mp3 -filter:a "atempo=2.0,atempo=1.25" output.mp3
+```
+
+### Noise Reduction
+
+Remove background noise:
+
+```bash
+# Create noise profile from first 1 second
+ffmpeg -i input.mp3 -t 1 -af "highpass=f=200,lowpass=f=3000" noise_profile.mp3
+
+# Apply noise reduction
+ffmpeg -i input.mp3 -af "highpass=f=200,lowpass=f=3000" output.mp3
+```
+
+### Volume Normalization
+
+Ensure consistent volume across chapters:
+
+```bash
+# Analyze audio
+ffmpeg -i input.mp3 -af "volumedetect" -f null -
+
+# Output shows: mean_volume: -23.5 dB
+# Normalize to -20 dB
+ffmpeg -i input.mp3 -af "volume=3.5dB" output.mp3
 ```
 
 ---
 
-## Conclusion
+## Resources
 
-This handbook provides a complete manual process for creating audiobooks from video files. The workflow is:
+### Tools Documentation
+- **FFmpeg**: https://ffmpeg.org/documentation.html
+- **AtomicParsley**: http://atomicparsley.sourceforge.net/
+- **M4B Specification**: https://developer.apple.com/documentation/
 
-1. **Acquire** video segments via HAR file analysis and download
-2. **Combine** TS segments into complete MP4 videos
-3. **Extract** audio from videos
-4. **Concatenate** audio files with chapter metadata
-5. **Package** as M4B audiobook with proper metadata
-6. **Enhance** with chapters and audiobook-specific settings
+### Testing Your Audiobook
+- **VLC Media Player**: https://www.videolan.org/ (all platforms)
+- **BookPlayer**: https://github.com/TortugaPower/BookPlayer (iOS)
+- **Voice Audiobook Player**: https://voiceapp.in/ (Android)
 
-Each step uses standard command-line tools (FFmpeg, MP4Box, mp4chaps, AtomicParsley) that work across platforms. While the process can be automated with scripts, understanding each command and its options allows you to customize for your specific needs and troubleshoot issues effectively.
+### Online Validators
+- **MediaInfo**: https://mediaarea.net/en/MediaInfo (inspect file details)
+- **FFprobe**: Built into FFmpeg, command-line file inspector
 
-For automation, consider writing scripts that wrap these commands while maintaining the flexibility to adjust parameters based on your source material quality and target audience requirements.
+---
+
+## Appendix: Complete Automation Script
+
+```bash
+#!/bin/bash
+# audiobook_creator.sh - Complete automation script
+
+set -e  # Exit on error
+
+# Configuration
+PROJECT_DIR="$(pwd)"
+VIDEOS_DIR="$PROJECT_DIR/videos"
+AUDIO_DIR="$PROJECT_DIR/audio"
+AUDIOBOOK_DIR="$PROJECT_DIR/audiobook"
+COVER_ART="$PROJECT_DIR/cover_art.jpg"
+
+# Metadata
+TITLE="Your Audiobook Title"
+AUTHOR="Author Name"
+YEAR="2024"
+GENRE="Audiobook"
+DESCRIPTION="Audiobook description"
+
+# Audio settings
+EXTRACT_BITRATE="192k"
+FINAL_BITRATE="92k"
+CHANNELS="1"
+
+echo "==================================="
+echo "Audiobook Creation Script"
+echo "==================================="
+
+# Step 1: Create directories
+echo -e "\n[1/8] Creating directories..."
+mkdir -p "$AUDIO_DIR" "$AUDIOBOOK_DIR"
+
+# Step 2: Extract audio
+echo -e "\n[2/8] Extracting audio from videos..."
+for video in "$VIDEOS_DIR"/*.mp4; do
+    basename=$(basename "$video" .mp4)
+    output="$AUDIO_DIR/${basename}.mp3"
+
+    if [ -f "$output" ]; then
+        echo "  ⊘ Skipping: $basename (already exists)"
+    else
+        echo "  ↓ Extracting: $basename"
+        ffmpeg -i "$video" -vn -acodec mp3 -ab "$EXTRACT_BITRATE" \
+               -loglevel error -stats -y "$output"
+    fi
+done
+
+# Step 3: Create concatenation list
+echo -e "\n[3/8] Creating concatenation list..."
+> "$AUDIOBOOK_DIR/audio_concat.txt"
+for audio in "$AUDIO_DIR"/*.mp3; do
+    echo "file '$(realpath "$audio")'" >> "$AUDIOBOOK_DIR/audio_concat.txt"
+done
+echo "  ✓ Listed $(wc -l < "$AUDIOBOOK_DIR/audio_concat.txt") audio files"
+
+# Step 4: Create chapters (simplified - equal duration chapters)
+echo -e "\n[4/8] Creating chapter markers..."
+current_time=0
+chapter_num=1
+> "$AUDIOBOOK_DIR/chapters.txt"
+echo ";FFMETADATA1" >> "$AUDIOBOOK_DIR/chapters.txt"
+echo "" >> "$AUDIOBOOK_DIR/chapters.txt"
+
+for audio in "$AUDIO_DIR"/*.mp3; do
+    duration=$(ffprobe -v error -show_entries format=duration \
+                       -of default=noprint_wrappers=1:nokey=1 "$audio")
+
+    start_ms=$(echo "$current_time * 1000" | bc | cut -d. -f1)
+    current_time=$(echo "$current_time + $duration" | bc)
+    end_ms=$(echo "$current_time * 1000" | bc | cut -d. -f1)
+
+    basename=$(basename "$audio" .mp3)
+
+    cat >> "$AUDIOBOOK_DIR/chapters.txt" << EOF
+[CHAPTER]
+TIMEBASE=1/1000
+START=$start_ms
+END=$end_ms
+title=$basename
+
+EOF
+
+    chapter_num=$((chapter_num + 1))
+done
+echo "  ✓ Created $((chapter_num - 1)) chapters"
+
+# Step 5: Concatenate and encode
+echo -e "\n[5/8] Creating M4B audiobook (this may take a while)..."
+ffmpeg -f concat -safe 0 -i "$AUDIOBOOK_DIR/audio_concat.txt" \
+       -c:a aac -b:a "$FINAL_BITRATE" -ac "$CHANNELS" \
+       -vn -f mp4 -movflags +faststart \
+       -loglevel error -stats \
+       -y "$AUDIOBOOK_DIR/temp_audiobook.m4b"
+echo "  ✓ Encoding complete"
+
+# Step 6: Add metadata
+echo -e "\n[6/8] Adding metadata..."
+ffmpeg -i "$AUDIOBOOK_DIR/temp_audiobook.m4b" -c copy \
+       -metadata title="$TITLE" \
+       -metadata artist="$AUTHOR" \
+       -metadata album_artist="$AUTHOR" \
+       -metadata album="$TITLE" \
+       -metadata date="$YEAR" \
+       -metadata genre="$GENRE" \
+       -metadata comment="$DESCRIPTION" \
+       -metadata:s:a:0 media_type=2 \
+       -loglevel error -stats \
+       -y "$AUDIOBOOK_DIR/temp_with_metadata.m4b"
+echo "  ✓ Metadata added"
+
+# Step 7: Add chapters
+echo -e "\n[7/8] Adding chapter markers..."
+ffmpeg -i "$AUDIOBOOK_DIR/temp_with_metadata.m4b" \
+       -i "$AUDIOBOOK_DIR/chapters.txt" \
+       -map 0 -map_metadata 0 -map_chapters 1 -c copy \
+       -loglevel error -stats \
+       -y "$AUDIOBOOK_DIR/temp_with_chapters.m4b"
+echo "  ✓ Chapters added"
+
+# Step 8: Add cover art and finalize
+echo -e "\n[8/8] Adding cover art and finalizing..."
+if [ -f "$COVER_ART" ]; then
+    AtomicParsley "$AUDIOBOOK_DIR/temp_with_chapters.m4b" \
+                  --artwork "$COVER_ART" \
+                  --overWrite > /dev/null 2>&1
+    echo "  ✓ Cover art added"
+else
+    echo "  ⚠ Cover art not found: $COVER_ART"
+fi
+
+AtomicParsley "$AUDIOBOOK_DIR/temp_with_chapters.m4b" \
+              --stik Audiobook \
+              --overWrite > /dev/null 2>&1
+echo "  ✓ Audiobook type set"
+
+# Rename to final
+FINAL_FILE="$AUDIOBOOK_DIR/${TITLE// /_}.m4b"
+mv "$AUDIOBOOK_DIR/temp_with_chapters.m4b" "$FINAL_FILE"
+
+# Cleanup
+rm -f "$AUDIOBOOK_DIR/temp_audiobook.m4b"
+rm -f "$AUDIOBOOK_DIR/temp_with_metadata.m4b"
+
+# Summary
+FILE_SIZE=$(du -h "$FINAL_FILE" | cut -f1)
+DURATION=$(ffprobe -v error -show_entries format=duration \
+                   -of default=noprint_wrappers=1:nokey=1 "$FINAL_FILE")
+HOURS=$(echo "$DURATION / 3600" | bc -l | xargs printf "%.1f")
+
+echo ""
+echo "==================================="
+echo "✅ AUDIOBOOK CREATED SUCCESSFULLY!"
+echo "==================================="
+echo "  📁 File: $FINAL_FILE"
+echo "  📦 Size: $FILE_SIZE"
+echo "  ⏱  Duration: $HOURS hours"
+echo "==================================="
+```
+
+Save this as `audiobook_creator.sh`, make it executable (`chmod +x audiobook_creator.sh`), and run it.
+
+---
+
+## Summary
+
+This manual has covered the complete process of creating professional audiobooks from video files:
+
+1. **Audio Extraction**: Converting video to high-quality intermediate audio
+2. **Metadata Preparation**: Organizing content structure and information
+3. **Assembly**: Concatenating and encoding to optimal M4B format
+4. **Metadata Addition**: Adding title, author, and audiobook flags
+5. **Chapters**: Creating navigable chapter markers
+6. **Finalization**: Adding cover art and final touches
+
+The resulting M4B file will:
+- Play on all major platforms
+- Display proper metadata
+- Support chapter navigation
+- Show cover artwork
+- Be recognized as an audiobook (not music)
+
+**Key takeaways**:
+- Use AAC codec at 92k bitrate for speech
+- Mono audio reduces file size without quality loss
+- Both FFmpeg and AtomicParsley steps are necessary
+- Absolute paths prevent concatenation errors
+- Chapter timestamps must be cumulative and in milliseconds
+
+With these tools and techniques, you can create professional-quality audiobooks from any video course or presentation series.
